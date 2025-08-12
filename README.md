@@ -2,6 +2,12 @@
 
 A Model Context Protocol (MCP) server that integrates with Orca AI's HUNT Platform API for finding information about people, companies, and other entities.
 
+## About Orca AI
+
+[Orca AI](https://orcaai.io) is a leading provider of investigative intelligence and due diligence solutions. The HUNT platform provides access to comprehensive datasets for person and entity research across multiple authoritative sources.
+
+This MCP server connects to the [Orca AI API](https://api.orcaai.io) to enable AI assistants to search and retrieve information from the HUNT platform directly within their workflows.
+
 ## Features
 
 - **Dynamic Configuration**: Directory-based configuration using local `.orcaai.json` files
@@ -12,7 +18,25 @@ A Model Context Protocol (MCP) server that integrates with Orca AI's HUNT Platfo
 
 ## Installation
 
-### Claude Code MCP
+### Claude Desktop
+
+Add to your Claude Desktop MCP configuration (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%/Claude/claude_desktop_config.json` on Windows):
+
+```json
+{
+  "mcpServers": {
+    "orca-ai": {
+      "command": "node",
+      "args": ["dist/index.js"],
+      "env": {
+        "ORCA_API_TOKEN": "your-orca-ai-api-key"
+      }
+    }
+  }
+}
+```
+
+### Claude Code (CLI)
 
 Add to your `~/.config/claude-code/mcp_servers.json`:
 
@@ -46,6 +70,24 @@ Add to your `~/.gemini/settings.json` or project `.gemini/settings.json`:
       "timeout": 30000,
       "trust": false,
       "includeTools": ["detect_orca_context", "get_hunt_results"]
+    }
+  }
+}
+```
+
+### Cursor CLI
+
+Add to your MCP configuration file:
+
+```json
+{
+  "mcpServers": {
+    "orca-ai": {
+      "command": "node",
+      "args": ["dist/index.js"],
+      "env": {
+        "ORCA_API_TOKEN": "your-orca-ai-api-key"
+      }
     }
   }
 }

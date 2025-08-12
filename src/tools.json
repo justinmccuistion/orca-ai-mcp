@@ -1,0 +1,12 @@
+{
+  "tools": [
+    {
+      "name": "orca",
+      "connector": {
+        "stdio": {
+          "command": ["node", "dist/OrcaAIMCPProxy.js"]
+        }
+      }
+    }
+  ]
+}

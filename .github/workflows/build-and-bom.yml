@@ -110,12 +110,6 @@ jobs:
         });
         " >> bill-of-materials.md
 
-    - name: Generate SPDX BOM
-      run: |
-        npm install -g @cyclonedx/cyclonedx-npm
-        cyclonedx-npm --output-format json --output-file cyclonedx-bom.json
-        cyclonedx-npm --output-format xml --output-file cyclonedx-bom.xml
-
     - name: Generate SBOM with Syft
       uses: anchore/sbom-action@v0
       with:
@@ -155,8 +149,6 @@ jobs:
         name: bill-of-materials
         path: |
           bill-of-materials.md
-          cyclonedx-bom.json
-          cyclonedx-bom.xml
           sbom.spdx.json
           audit.json
         retention-days: 30

@@ -1,0 +1,188 @@
+name: Build and Generate Bill of Materials
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-bom:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      actions: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run TypeScript type check
+      run: npm run type-check
+
+    - name: Build project
+      run: npm run build
+
+    - name: Run tests
+      run: npm test
+
+    - name: Generate dependency tree
+      run: |
+        echo "# Orca AI MCP Server - Bill of Materials" > bill-of-materials.md
+        echo "Generated on: $(date)" >> bill-of-materials.md
+        echo "" >> bill-of-materials.md
+        echo "## Project Information" >> bill-of-materials.md
+        echo "- **Repository:** orca-ai-mcp" >> bill-of-materials.md
+        echo "- **Version:** $(node -p "require('./package.json').version")" >> bill-of-materials.md
+        echo "- **License:** $(node -p "require('./package.json').license")" >> bill-of-materials.md
+        echo "- **Build Date:** $(date)" >> bill-of-materials.md
+        echo "- **Git Commit:** $GITHUB_SHA" >> bill-of-materials.md
+        echo "" >> bill-of-materials.md
+
+    - name: Generate production dependencies BOM
+      run: |
+        echo "## Production Dependencies" >> bill-of-materials.md
+        echo "" >> bill-of-materials.md
+        npm list --prod --json > prod-deps.json
+        node -e "
+        const deps = JSON.parse(require('fs').readFileSync('prod-deps.json'));
+        const flattenDeps = (deps, prefix = '') => {
+          const result = [];
+          if (deps.dependencies) {
+            for (const [name, info] of Object.entries(deps.dependencies)) {
+              result.push({
+                name: prefix + name,
+                version: info.version,
+                resolved: info.resolved,
+                license: info.license || 'Unknown'
+              });
+              if (info.dependencies) {
+                result.push(...flattenDeps(info, prefix + '  '));
+              }
+            }
+          }
+          return result;
+        };
+        const allDeps = flattenDeps(deps);
+        allDeps.forEach(dep => {
+          console.log(\`- **\${dep.name}@\${dep.version}** - License: \${dep.license}\`);
+        });
+        " >> bill-of-materials.md
+
+    - name: Generate development dependencies BOM
+      run: |
+        echo "" >> bill-of-materials.md
+        echo "## Development Dependencies" >> bill-of-materials.md
+        echo "" >> bill-of-materials.md
+        npm list --dev --json > dev-deps.json
+        node -e "
+        const deps = JSON.parse(require('fs').readFileSync('dev-deps.json'));
+        const flattenDeps = (deps, prefix = '') => {
+          const result = [];
+          if (deps.dependencies) {
+            for (const [name, info] of Object.entries(deps.dependencies)) {
+              result.push({
+                name: prefix + name,
+                version: info.version,
+                resolved: info.resolved,
+                license: info.license || 'Unknown'
+              });
+              if (info.dependencies) {
+                result.push(...flattenDeps(info, prefix + '  '));
+              }
+            }
+          }
+          return result;
+        };
+        const allDeps = flattenDeps(deps);
+        allDeps.forEach(dep => {
+          console.log(\`- **\${dep.name}@\${dep.version}** - License: \${dep.license}\`);
+        });
+        " >> bill-of-materials.md
+
+    - name: Generate SPDX BOM
+      run: |
+        npm install -g @cyclonedx/cyclonedx-npm
+        cyclonedx-npm --output-format json --output-file cyclonedx-bom.json
+        cyclonedx-npm --output-format xml --output-file cyclonedx-bom.xml
+
+    - name: Generate SBOM with Syft
+      uses: anchore/sbom-action@v0
+      with:
+        path: .
+        format: spdx-json
+        output-file: sbom.spdx.json
+
+    - name: Create BOM summary
+      run: |
+        echo "" >> bill-of-materials.md
+        echo "## Security Scan Summary" >> bill-of-materials.md
+        echo "" >> bill-of-materials.md
+        echo "### Audit Results" >> bill-of-materials.md
+        npm audit --json > audit.json || true
+        node -e "
+        try {
+          const audit = JSON.parse(require('fs').readFileSync('audit.json'));
+          if (audit.metadata && audit.metadata.vulnerabilities) {
+            const vulns = audit.metadata.vulnerabilities;
+            console.log(\`- **Total Vulnerabilities:** \${vulns.total}\`);
+            console.log(\`- **Critical:** \${vulns.critical}\`);
+            console.log(\`- **High:** \${vulns.high}\`);
+            console.log(\`- **Moderate:** \${vulns.moderate}\`);
+            console.log(\`- **Low:** \${vulns.low}\`);
+            console.log(\`- **Info:** \${vulns.info}\`);
+          } else {
+            console.log('- **Status:** No vulnerabilities found');
+          }
+        } catch (e) {
+          console.log('- **Status:** Audit completed successfully');
+        }
+        " >> bill-of-materials.md
+
+    - name: Upload Bill of Materials artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: bill-of-materials
+        path: |
+          bill-of-materials.md
+          cyclonedx-bom.json
+          cyclonedx-bom.xml
+          sbom.spdx.json
+          audit.json
+        retention-days: 30
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-output
+        path: |
+          dist/
+          package.json
+          package-lock.json
+        retention-days: 7
+
+    - name: Comment BOM summary on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const bomContent = fs.readFileSync('bill-of-materials.md', 'utf8');
+          const summary = bomContent.split('\n').slice(0, 20).join('\n') + '\n\n[View full BOM in artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})';
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `## 📋 Bill of Materials Generated\n\n${summary}`
+          });

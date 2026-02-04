@@ -48,7 +48,7 @@
   },
   "homepage": "https://github.com/justinmccuistion/orca-ai-mcp#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.2", 
+    "@modelcontextprotocol/sdk": "^1.26.0", 
     "axios": "^1.7.7",
     "zod": "^3.23.8"
   },
